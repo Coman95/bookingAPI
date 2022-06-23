@@ -10,7 +10,7 @@ use App\Http\Controllers\API\BaseController as BaseController;
 use App\Http\Resources\Trip as TripResource;
 use App\Models\Trip;
 use App\Models\User;
-
+use DateTime;
 
 class TripController extends BaseController
 {
@@ -23,7 +23,7 @@ class TripController extends BaseController
     {
         $trips = Trip::all();
 
-        return $this->handleResponse(TripResource::collection($trips), 'Trips have been retrieved!');
+        return $this->successResponse(TripResource::collection($trips), 'Trips have been retrieved!');
     }
 
     /**
@@ -33,15 +33,15 @@ class TripController extends BaseController
     public function show($slug)
     {
         if (is_null($slug)){
-            return $this->handleError('Slug not found!');
+            return $this->errorResponse('Slug not found!');
         }
-        // Property [id] does not exist on this collection instance
-        $trip = Trip::where('slug', 'like', $slug)->get()[0];
+
+        $trip = Trip::where('slug', 'LIKE', "%{$slug}%" )->get()->first();
         
         if (is_null($trip)) {
-            return $this->handleError('Trip not found!');
+            return $this->errorResponse('Trip not found!');
         }
-        return $this->handleResponse(new TripResource($trip), 'Trip retrieved!');
+        return $this->successResponse(new TripResource($trip), 'Trip retrieved!');
     }
 
      /**
@@ -57,10 +57,10 @@ class TripController extends BaseController
         ]);
         
         if($validator->fails()){
-            return $this->handleError($validator->errors());       
+            return $this->errorResponse($validator->errors());       
         }
         $trip = Trip::create($input);
-        return $this->handleResponse(new TripResource($trip), 'Trip created!');
+        return $this->successResponse(new TripResource($trip), 'Trip created!');
     }
     
     /**
@@ -74,11 +74,16 @@ class TripController extends BaseController
 
         $validator = Validator::make($input, [
             'slug' => 'required',
-            'title' => 'required'
+            'title' => 'required',
+            'description' => 'required',
+            'start_date' => 'required',
+            'end_date' => 'required',
+            'price' => 'required',
+            'location' => 'required',
         ]);
 
         if($validator->fails() || $trip == null){
-            return $this->handleError($validator->errors(), 'No trip with id: ' . $id);       
+            return $this->errorResponse($validator->errors(), 'No trip with id: ' . $id);       
         }
 
         $trip->slug = $input['slug'];
@@ -90,7 +95,7 @@ class TripController extends BaseController
         $trip->location = $input['location'];
         $trip->save();
         
-        return $this->handleResponse(new TripResource($trip), 'Trip successfully updated!');
+        return $this->successResponse(new TripResource($trip), 'Trip successfully updated!');
     }
    
     /**
@@ -100,44 +105,43 @@ class TripController extends BaseController
     public function destroy(Trip $trip)
     {
         $trip->delete();
-        return $this->handleResponse([], 'Trip deleted!');
+        return $this->successResponse([], 'Trip deleted!');
     }
 
     /**
-     * Search Trip by title 
+     * Get trips according to search and order_by terms
      * @return \Illuminate\Http\JsonResponse
      */
-    public function search($title)
+    public function terms(Request $request)
     {
-        $trips = Trip::where('title', 'like',  '%' . $title . '%')->get();
+        $search = $request->input('q');
+        $order_by = $request->input('order_by');
 
-        return $this->handleResponse($trips, 'Searched for: ' . $title);
-    }
+        if ( is_null($search) )
+        {
+            return $this->errorResponse([], 'No search term found'); 
+        }
 
-    /**
-     * Order Trips by param, Add '-' before the param to reverse ordering.
-     * @return \Illuminate\Http\JsonResponse
-     */
-    public function orderby($param)
-    { 
-        if( $param[0] == '-'){
+        if( is_null($order_by))
+        {
+            // TODO:: query will break if column does not exist
+            $order_by = 'id';
+        }
+
+        if( $order_by[0] == '-'){
             $order = 'desc';
-            $param = str_replace('-', '', $param);
+            $order_by = str_replace('-', '', $order_by);
         } else {
             $order = 'asc';
         }
+        
+        $trips = Trip::query()
+                    ->where('title', 'LIKE', "%{$search}%")
+                    ->orderby($order_by, $order)
+                    ->get();
 
-        try {
-            $trips = Trip::orderby($param, $order)->get();
-        } catch (\Throwable $th) {
-            return $this->handleError('Column does not exist!');
-        }
-
-        if (is_null($trips)) {
-            return $this->handleError('No Trips found!');
-        }
-
-        return $this->handleResponse($trips, 'Ordered by: ' . $param);
+        return $this->successResponse($trips, 'Search for: ' . $search . ' and ordered by ' . $order_by);
+      
     }
 
     /**
@@ -148,19 +152,44 @@ class TripController extends BaseController
     {
         $user = Auth::user();
         $trip = Trip::find($trip);
+        $currentDate = new DateTime();
 
         if (is_null($trip)) {
-            return $this->handleError('Trip not found!');
+            return $this->errorResponse('Trip not found!', $code = 400);
         }
 
+        $start = new DateTime($trip->start_date);
+        if ( $start < $currentDate ){
+            return $this->errorResponse('Trip has already started!', $code = 400);
+        }     
+
         if ($this->tripBooked($trip, $user)){
-            return $this->handleError('Booking already exists!');
+            return $this->errorResponse('Booking already exists!', $code = 400);
         }
 
         // Update Pivot Table for many to many relationship
         $user->trips()->attach($trip);
 
-        return $this->handleResponse($trip, 'Booking was successfull!');
+        return $this->successResponse( $trip, 'Booking was successfull!');
+    }
+
+    /**
+     * Get trips between 2 prices
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function priceRange($start_price, $end_price = PHP_INT_MAX)
+    {
+
+        $trips = Trip::query()
+                    ->where('price', '>', $start_price)
+                    ->where('price', '<', $end_price)
+                    ->get();
+
+        if (is_null($trips->first())) {
+            return $this->errorResponse('No Trips found!', $code = 400);
+        }
+      
+        return $this->successResponse( $trips, 'Trips starting from: ' . $start_price);
     }
 
     /**

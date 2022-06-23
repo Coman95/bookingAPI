@@ -13,7 +13,7 @@ class BaseController extends Controller
      * Add data and message to JsonResponse
      * @return \Illuminate\Http\JsonResponse
      */
-    public function handleResponse($result, $msg)
+    public function successResponse($result, $msg)
     {
     	$res = [
             'success' => true,
@@ -27,7 +27,7 @@ class BaseController extends Controller
      * Add error data and message to JsonResponse
      * @return \Illuminate\Http\JsonResponse
      */
-    public function handleError($error, $errorMsg = [], $code = 404)
+    public function errorResponse($error, $errorMsg = [], $code = 404)
     {
     	$res = [
             'success' => false,

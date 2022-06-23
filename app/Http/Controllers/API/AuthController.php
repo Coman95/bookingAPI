@@ -25,10 +25,10 @@ class AuthController extends BaseController
             $success['first_name'] =  $auth->first_name;
             $success['last_name'] =  $auth->last_name;
    
-            return $this->handleResponse($success, 'User logged-in!');
+            return $this->successResponse($success, 'User logged-in!');
         } 
         else{ 
-            return $this->handleError('Unauthorised.', ['error'=>'Unauthorised']);
+            return $this->errorResponse('Unauthorised.', ['error'=>'Unauthorised']);
         } 
     }
 
@@ -47,7 +47,7 @@ class AuthController extends BaseController
         ]);
    
         if($validator->fails()){
-            return $this->handleError($validator->errors());       
+            return $this->errorResponse($validator->errors());       
         }
    
         $input = $request->all();
@@ -57,7 +57,7 @@ class AuthController extends BaseController
         $success['first_name'] =  $user->first_name;
         $success['last_name'] =  $user->last_name;
    
-        return $this->handleResponse($success, 'User successfully registered!');
+        return $this->successResponse($success, 'User successfully registered!');
     }
    
 }

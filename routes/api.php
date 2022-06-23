@@ -32,10 +32,12 @@ Route::post('register', [AuthController::class, 'register']);
 Route::middleware(['auth:sanctum'])->group( function () {
     Route::resource('trip', TripController::class);
 
-    Route::get('trip/search/{title}', [TripController::class, 'search']);
-    Route::get('trip/orderby/{column}', [TripController::class, 'orderby']);
+    Route::get('trips', [TripController::class, 'terms']);
 
     Route::get('trip/reserve/{trip}', [TripController::class, 'reserve']);
+    
+    Route::get('trip/price/{start_price}/{end_price?}', [TripController::class, 'priceRange']);
+
 });
 
 Route::fallback(function(){
